@@ -119,6 +119,8 @@ func handleRemoteForward(newRequest *ssh.Request, sshConn *utils.SSHConnection, 
 			return
 		}
 
+                newRequest.Reply(true, nil)
+
 		mainRequestMessages = requestMessages
 
 		defer func() {
@@ -170,6 +172,8 @@ func handleRemoteForward(newRequest *ssh.Request, sshConn *utils.SSHConnection, 
 			}
 			return
 		}
+
+                newRequest.Reply(true, nil)
 
 		mainRequestMessages = requestMessages
 
