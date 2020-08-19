@@ -10,7 +10,8 @@ services:
       - ./le-config.yml:/etc/dnsrobocert/config.yml
     restart: always
   sish:
-    image: antoniomika/sish:latest
+#    image: antoniomika/sish:latest
+    image: sish-grr-fix:latest
     container_name: sish
     depends_on: 
       - letsencrypt
@@ -19,16 +20,26 @@ services:
       - ./pubkeys:/pubkeys
       - ./keys:/keys
       - ./ssl:/ssl
+      - ./log:/log
     command: |
+      --authentication=true
+      --authentication-password=YOUR-PASSWORD
       --ssh-address=:22
       --http-address=:80
       --https-address=:443
       --https=true
       --https-certificate-directory=/ssl
-      --authentication-keys-directory=/pubkeys
+      --https-ondemand-certificate=false
+      --https-ondemand-certificate-accept-terms=true
+      --https-ondemand-certificate-email=YOUREMAIL@EMAIL.COM
       --private-key-location=/keys/ssh_key
+      --private-key-passphrase=YOUR-PASSPHRASE
       --bind-random-ports=false
-      --bind-random-subdomains=false
-      --domain=ssi.sh
+      --bind-random-subdomains=true
+      --bind-random-subdomains-length=8
+      --domain=YOUR.DOMAIN
+      --debug=false
+      --log-to-file=true
+      --log-to-file-path=/log/sish.log
     network_mode: host
     restart: always

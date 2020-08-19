@@ -5,8 +5,8 @@ certificates:
   - containers:
     - sish
   domains:
-  - ssi.sh
-  - '*.ssi.sh'
+  - your.domain
+  - '*.your.domain'
   name: ssi.sh
   profile: cloudflare
 profiles:
@@ -15,3 +15,4 @@ profiles:
   provider_options:
     auth_token: AUTH_TOKEN
     auth_username: AUTH_EMAIL
+    zone_id: ZONE_ID
