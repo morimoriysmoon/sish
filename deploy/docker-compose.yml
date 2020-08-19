@@ -1,6 +1,14 @@
 version: '3.7'
 
 services:
+  reverseproxy:
+    image: nginx
+    container_name: nginx
+    ports:
+      - 443:443
+    volumes:
+      - ./nginx-preread-protocol.conf:/etc/nginx/nginx.conf:ro
+    network_mode: host
   letsencrypt:
     image: adferrand/dnsrobocert:latest
     container_name: letsencrypt-dns
@@ -24,9 +32,9 @@ services:
     command: |
       --authentication=true
       --authentication-password=YOUR-PASSWORD
-      --ssh-address=:22
+      --ssh-address=:2222
       --http-address=:80
-      --https-address=:443
+      --https-address=:8443
       --https=true
       --https-certificate-directory=/ssl
       --https-ondemand-certificate=false
