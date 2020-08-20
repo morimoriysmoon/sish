@@ -32,7 +32,7 @@ By default, sish will generate private key unless given by user. The algorithm "
 The algorithm "ecdsa-sha2-nistp521" can be a good candidate. Please use passphrase for security. We need the passphrase for next step. The private key should be OpenSSH private key format(not Putty format). After creating, please rename as "ssh_key" and put in the folder "deploy/keys".
 
 ## Known Hosts
-We need know-hosts string to properly connect to SSH service of sish. We can copy and paste it from other devices after successful connection.
+We need known-hosts string to properly connect to SSH service of sish. We can copy and paste it from other devices after successful connection.
 
 ## Configuration file for Docker compose
 	./deploy/docker-compose.yml
