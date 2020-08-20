@@ -2,7 +2,7 @@
 
 ## Purchase domain and connect to DNS Provider
 To generate wildcard certificates with Letsencrypt, we need to use DNSrobocert and provide DNS API key to DNSrobocert. I recommend cloudflare as DNS Provider.
-You can find more DNS providers DNSrobocert supports.
+You can find more DNS providers DNSrobocert supports with link below.
 
 	https://dnsrobocert.readthedocs.io/en/latest/providers_options.html
 
@@ -25,6 +25,7 @@ Please edit DNS record to point all the subdomains to an identical IP address.
 ## Build
 At the moment, sish has an issue with Global Request command. sish does not send reply for Global Request command to client unless errors are found. I hope it will be fixed soon. So as to avoid the issue, we need to build docker image with source.
 
+	cd sish
 	sudo docker build -t sish-grr-fix 
 
 ## Private key for sish
@@ -40,7 +41,7 @@ We need known-hosts string to properly connect to SSH service of sish. We can co
 	version: '3.7'
 
 	services:
-	reverseproxy:
+	    reverseproxy:
 		image: nginx
 		container_name: nginx
 		ports:
@@ -48,7 +49,7 @@ We need known-hosts string to properly connect to SSH service of sish. We can co
 		volumes:
 		- ./nginx-preread-protocol.conf:/etc/nginx/nginx.conf:ro
 		network_mode: host
-	letsencrypt:
+	    letsencrypt:
 		image: adferrand/dnsrobocert:latest
 		container_name: letsencrypt-dns
 		volumes:
@@ -56,7 +57,7 @@ We need known-hosts string to properly connect to SSH service of sish. We can co
 		- ./letsencrypt:/etc/letsencrypt
 		- ./le-config.yml:/etc/dnsrobocert/config.yml
 		restart: always
-	sish:
+	    sish:
 		image: sish-grr-fix:latest
 		container_name: sish
 		depends_on: 
@@ -149,7 +150,7 @@ We need known-hosts string to properly connect to SSH service of sish. We can co
 	ln -s /etc/letsencrypt/live/<your domain>/fullchain.pem deploy/ssl/<your domain>.crt\
 	ln -s /etc/letsencrypt/live/<your domain>/privkey.pem deploy/ssl/<your domain>.key
 
-"/etc/letsencrypt/" is a directory of the mounted volume of the container, not a directory on Ubuntu.
+"/etc/letsencrypt/" is a directory on mounted volume of the container, not a directory on Ubuntu.
 
 ## Firewall (with iptables)
 TCP 80,443 ports should be allowed.
