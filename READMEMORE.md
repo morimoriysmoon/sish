@@ -26,7 +26,7 @@ Please edit DNS record to point all the subdomains to an identical IP address.
 At the moment, sish has an issue with Global Request command. sish does not send reply for Global Request command to client unless errors are found. I hope it will be fixed soon. So as to avoid the issue, we need to build docker image with source.
 
 	cd sish
-	sudo docker build -t sish-grr-fix 
+	sudo docker build -t sish-grr-fix ./
 
 ## Private key for sish
 By default, sish will generate private key unless given by user. The algorithm "Ed25519" will be used by default. However, JSch does not support "Ed25519" algorithm. So we need to create own private key with different algorithm.\
