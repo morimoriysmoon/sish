@@ -88,6 +88,8 @@ We need known-hosts string to properly connect to SSH service of sish. We can co
 		--debug=false
 		--log-to-file=true
 		--log-to-file-path=/log/sish.log
+		--redirect-root=true
+                --redirect-root-location=https://github.com
 		network_mode: host
 		restart: always
 
