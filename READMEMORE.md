@@ -114,8 +114,8 @@ We need known-hosts string to properly connect to SSH service of sish. We can co
 	  provider: cloudflare
 	  provider_options:
 		auth_token: AUTH_TOKEN
-		auth_username: AUTH_EMAIL
-		zone_id: ZONE_ID
+		auth_username: AUTH_EMAIL # Only with Global API key
+		zone_id: ZONE_ID # Only with Global API key
 
 ## Configuration file for NGINX
 	./deploy/nginx-preread-protocol.conf
