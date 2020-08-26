@@ -15,6 +15,7 @@ Please edit DNS record to point all the subdomains to an identical IP address.
 
 1. Docker
    - https://docs.docker.com/engine/install/ubuntu/
+   - If failure with Ubuntu 20.04 LTS, please refer to https://stackoverflow.com/questions/61401626/docker-installation-failed-on-ubuntu-20-04-ltsvmware
 
 2. Docker compose
    - https://docs.docker.com/compose/install/
