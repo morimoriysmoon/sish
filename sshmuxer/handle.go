@@ -16,7 +16,7 @@ func handleRequests(reqs <-chan *ssh.Request, sshConn *utils.SSHConnection, stat
 		if viper.GetBool("debug") {
 			log.Println("Main Request Info", req.Type, req.WantReply, string(req.Payload))
 		}
-		go handleRequest(req, sshConn, state)
+		handleRequest(req, sshConn, state)
 	}
 }
 
@@ -41,10 +41,13 @@ func handleRequest(newRequest *ssh.Request, sshConn *utils.SSHConnection, state 
 
 // checkSession will check a session to see that it has a session.
 func checkSession(newRequest *ssh.Request, sshConn *utils.SSHConnection, state *utils.State) {
+	sshConn.SetupLock.Lock()
 	if sshConn.CleanupHandler {
+		sshConn.SetupLock.Unlock()
 		return
 	}
 	sshConn.CleanupHandler = true
+	sshConn.SetupLock.Unlock()
 	select {
 	case <-sshConn.Session:
 		return

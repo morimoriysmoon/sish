@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"sync"
 
 	"github.com/antoniomika/go-proxyproto"
 	"github.com/antoniomika/sish/utils"
@@ -22,6 +23,12 @@ type channelForwardMsg struct {
 	Rport uint32
 }
 
+// channelForwardReply defines the reply to inform the client what port was
+// actually assigned https://tools.ietf.org/html/rfc4254#section-7.1
+type channelForwardReply struct {
+	Rport uint32
+}
+
 // forwardedTCPPayload is the payload sent by SSH
 // to init a forwarded connection.
 type forwardedTCPPayload struct {
@@ -34,6 +41,7 @@ type forwardedTCPPayload struct {
 // handleRemoteForward will handle a remote forward request
 // and stand up the relevant listeners.
 func handleRemoteForward(newRequest *ssh.Request, sshConn *utils.SSHConnection, state *utils.State) {
+	cleanupOnce := &sync.Once{}
 	check := &channelForwardMsg{}
 
 	err := ssh.Unmarshal(newRequest.Payload, check)
@@ -85,18 +93,19 @@ func handleRemoteForward(newRequest *ssh.Request, sshConn *utils.SSHConnection, 
 	state.Listeners.Store(listenAddr, listenerHolder)
 	sshConn.Listeners.Store(listenAddr, listenerHolder)
 
+	deferHandler := func() {}
+
 	cleanupChanListener := func() {
 		listenerHolder.Close()
 		state.Listeners.Delete(listenAddr)
 		sshConn.Listeners.Delete(listenAddr)
 		os.Remove(listenAddr)
+		deferHandler()
 	}
-
-	defer cleanupChanListener()
 
 	go func() {
 		<-sshConn.Close
-		cleanupChanListener()
+		cleanupOnce.Do(cleanupChanListener)
 	}()
 
 	connType := "tcp"
@@ -105,6 +114,8 @@ func handleRemoteForward(newRequest *ssh.Request, sshConn *utils.SSHConnection, 
 	} else if stringPort == "443" {
 		connType = "https"
 	}
+
+	portChannelForwardReplyPayload := channelForwardReply{bindPort}
 
 	mainRequestMessages := fmt.Sprintf("Starting SSH Forwarding service for %s. Forwarded connections can be accessed via the following methods:\r\n", aurora.Sprintf(aurora.Green("%s:%s"), connType, stringPort))
 
@@ -119,14 +130,12 @@ func handleRemoteForward(newRequest *ssh.Request, sshConn *utils.SSHConnection, 
 			return
 		}
 
-        newRequest.Reply(true, nil)
-
 		mainRequestMessages = requestMessages
 
-		defer func() {
+		deferHandler = func() {
 			err := pH.Balancer.RemoveServer(serverURL)
 			if err != nil {
-				log.Println("Unable to add server to balancer")
+				log.Println("Unable to remove server from balancer:", err)
 			}
 
 			pH.SSHConnections.Delete(listenerHolder.Addr().String())
@@ -138,7 +147,7 @@ func handleRemoteForward(newRequest *ssh.Request, sshConn *utils.SSHConnection, 
 					state.Console.RemoveRoute(host)
 				}
 			}
-		}()
+		}
 	case utils.AliasListener:
 		aH, serverURL, validAlias, requestMessages, err := handleAliasListener(check, stringPort, mainRequestMessages, listenerHolder, state, sshConn)
 		if err != nil {
@@ -151,10 +160,10 @@ func handleRemoteForward(newRequest *ssh.Request, sshConn *utils.SSHConnection, 
 
 		mainRequestMessages = requestMessages
 
-		defer func() {
+		deferHandler = func() {
 			err := aH.Balancer.RemoveServer(serverURL)
 			if err != nil {
-				log.Println("Unable to add server to balancer")
+				log.Println("Unable to remove server from balancer:", err)
 			}
 
 			aH.SSHConnections.Delete(listenerHolder.Addr().String())
@@ -162,7 +171,7 @@ func handleRemoteForward(newRequest *ssh.Request, sshConn *utils.SSHConnection, 
 			if len(aH.Balancer.Servers()) == 0 {
 				state.AliasListeners.Delete(validAlias)
 			}
-		}()
+		}
 	case utils.TCPListener:
 		tH, serverURL, tcpAddr, requestMessages, err := handleTCPListener(check, bindPort, mainRequestMessages, listenerHolder, state, sshConn)
 		if err != nil {
@@ -173,16 +182,16 @@ func handleRemoteForward(newRequest *ssh.Request, sshConn *utils.SSHConnection, 
 			return
 		}
 
-        newRequest.Reply(true, nil)
+		portChannelForwardReplyPayload.Rport = uint32(tH.Listener.Addr().(*net.TCPAddr).Port)
 
 		mainRequestMessages = requestMessages
 
 		go tH.Handle(state)
 
-		defer func() {
+		deferHandler = func() {
 			err := tH.Balancer.RemoveServer(serverURL)
 			if err != nil {
-				log.Println("Unable to add server to balancer")
+				log.Println("Unable to remove server from balancer:", err)
 			}
 
 			tH.SSHConnections.Delete(listenerHolder.Addr().String())
@@ -192,59 +201,72 @@ func handleRemoteForward(newRequest *ssh.Request, sshConn *utils.SSHConnection, 
 				state.Listeners.Delete(tcpAddr)
 				state.TCPListeners.Delete(tcpAddr)
 			}
-		}()
+		}
 	}
 
-	sshConn.SendMessage(mainRequestMessages, false)
-
-	for {
-		cl, err := listenerHolder.Accept()
-		if err != nil {
-			break
-		}
-
-		resp := &forwardedTCPPayload{
-			Addr:       check.Addr,
-			Port:       check.Rport,
-			OriginAddr: check.Addr,
-			OriginPort: check.Rport,
-		}
-
-		newChan, newReqs, err := sshConn.SSHConn.OpenChannel("forwarded-tcpip", ssh.Marshal(resp))
-		if err != nil {
-			sshConn.SendMessage(err.Error(), true)
-			cl.Close()
-			continue
-		}
-
-		if sshConn.ProxyProto != 0 && listenerType == utils.TCPListener {
-			var sourceInfo *net.TCPAddr
-			var destInfo *net.TCPAddr
-			if _, ok := cl.RemoteAddr().(*net.TCPAddr); !ok {
-				sourceInfo = sshConn.SSHConn.RemoteAddr().(*net.TCPAddr)
-				destInfo = sshConn.SSHConn.LocalAddr().(*net.TCPAddr)
-			} else {
-				sourceInfo = cl.RemoteAddr().(*net.TCPAddr)
-				destInfo = cl.LocalAddr().(*net.TCPAddr)
-			}
-
-			proxyProtoHeader := proxyproto.Header{
-				Version:            sshConn.ProxyProto,
-				Command:            proxyproto.ProtocolVersionAndCommand(proxyproto.PROXY),
-				TransportProtocol:  proxyproto.AddressFamilyAndProtocol(proxyproto.TCPv4),
-				SourceAddress:      sourceInfo.IP,
-				DestinationAddress: destInfo.IP,
-				SourcePort:         uint16(sourceInfo.Port),
-				DestinationPort:    uint16(destInfo.Port),
-			}
-
-			_, err := proxyProtoHeader.WriteTo(newChan)
-			if err != nil && viper.GetBool("debug") {
-				log.Println("Error writing to channel:", err)
-			}
-		}
-
-		go utils.CopyBoth(cl, newChan)
-		go ssh.DiscardRequests(newReqs)
+	if check.Rport != 0 {
+		portChannelForwardReplyPayload.Rport = check.Rport
 	}
+
+	err = newRequest.Reply(true, ssh.Marshal(portChannelForwardReplyPayload))
+	if err != nil {
+		log.Println("Error replying to port forwarding request:", err)
+		return
+	}
+
+	sshConn.SendMessage(mainRequestMessages, true)
+
+	go func() {
+		defer cleanupOnce.Do(cleanupChanListener)
+		for {
+			cl, err := listenerHolder.Accept()
+			if err != nil {
+				break
+			}
+
+			resp := &forwardedTCPPayload{
+				Addr:       check.Addr,
+				Port:       portChannelForwardReplyPayload.Rport,
+				OriginAddr: check.Addr,
+				OriginPort: portChannelForwardReplyPayload.Rport,
+			}
+
+			newChan, newReqs, err := sshConn.SSHConn.OpenChannel("forwarded-tcpip", ssh.Marshal(resp))
+			if err != nil {
+				sshConn.SendMessage(err.Error(), true)
+				cl.Close()
+				continue
+			}
+
+			if sshConn.ProxyProto != 0 && listenerType == utils.TCPListener {
+				var sourceInfo *net.TCPAddr
+				var destInfo *net.TCPAddr
+				if _, ok := cl.RemoteAddr().(*net.TCPAddr); !ok {
+					sourceInfo = sshConn.SSHConn.RemoteAddr().(*net.TCPAddr)
+					destInfo = sshConn.SSHConn.LocalAddr().(*net.TCPAddr)
+				} else {
+					sourceInfo = cl.RemoteAddr().(*net.TCPAddr)
+					destInfo = cl.LocalAddr().(*net.TCPAddr)
+				}
+
+				proxyProtoHeader := proxyproto.Header{
+					Version:            sshConn.ProxyProto,
+					Command:            proxyproto.ProtocolVersionAndCommand(proxyproto.PROXY),
+					TransportProtocol:  proxyproto.AddressFamilyAndProtocol(proxyproto.TCPv4),
+					SourceAddress:      sourceInfo.IP,
+					DestinationAddress: destInfo.IP,
+					SourcePort:         uint16(sourceInfo.Port),
+					DestinationPort:    uint16(destInfo.Port),
+				}
+
+				_, err := proxyProtoHeader.WriteTo(newChan)
+				if err != nil && viper.GetBool("debug") {
+					log.Println("Error writing to channel:", err)
+				}
+			}
+
+			go utils.CopyBoth(cl, newChan)
+			go ssh.DiscardRequests(newReqs)
+		}
+	}()
 }
