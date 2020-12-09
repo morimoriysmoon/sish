@@ -20,14 +20,19 @@ Please edit DNS record to point all the subdomains to an identical IP address.
 2. Docker compose
    - https://docs.docker.com/compose/install/
 
-## Git clone
+## Clone git repository
 	git clone https://github.com/morimoriysmoon/sish.git
 
 ## Build
-At the moment, sish has an issue with Global Request command. sish does not send reply for Global Request command to client unless errors are found. I hope it will be fixed soon. So as to avoid the issue, we need to build docker image with source.
+~~At the moment, sish has an issue with Global Request command. sish does not send reply for Global Request command to client unless errors are found. I hope it will be fixed soon. So as to avoid the issue, we need to build docker image with source.~~ fixed.
 
 	cd sish
 	sudo docker build -t sish-grr-fix ./
+	or
+	sudo DOCKER_BUILDKIT=1 docker build -t sish-grr-fix ./
+
+## Check if image is properly created
+	sudo docker images	
 
 ## Private key for sish
 By default, sish will generate private key unless given by user. The algorithm "Ed25519" will be used by default. However, JSch does not support "Ed25519" algorithm. So we need to create own private key with different algorithm.\
@@ -90,7 +95,7 @@ We need known-hosts string to properly connect to SSH service of sish. We can co
 		--log-to-file=true
 		--log-to-file-path=/log/sish.log
 		--redirect-root=true
-                --redirect-root-location=https://github.com
+		--redirect-root-location=https://github.com
 		network_mode: host
 		restart: always
 
@@ -161,8 +166,11 @@ TCP 80,443 ports should be allowed.
 	sudo iptables -I INPUT LINENO -i NIC_ID -p tcp --dport 80 -m state --state NEW,ESTABLISHED -j ACCEPT
 	sudo iptables -I INPUT LINENO -i NIC_ID -p tcp --dport 443 -m state --state NEW,ESTABLISHED -j ACCEPT
 
-## Run
+## Run as daemon
 	sudo docker-compose -f deploy/docker-compose.yml up -d
+
+## Down
+	sudo docker-compose -f deploy/docker-compose.yml down
 
 ## Check log message
 	tail -f deploy/log/sish.log
